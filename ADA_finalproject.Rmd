@@ -260,6 +260,36 @@ Merged_PA_exact <- Merged_PA_exact %>%
          MVPA_Weekend_cat = factor(MVPA_Weekend_cat, 0:1, c("Insufficient MVPA", "Sufficient MVPA"))) #make it as a factor variable
 ```
 
+# FIGURE 1: Flow chart upto the analytical sample
+
+```{r}
+pacman::p_load(survival, survminer, tidyverse, readr, lmtest, table1)
+```
+
+
+```{r}
+library(DiagrammeR)
+
+#Figure 1
+grViz("digraph flowchart {
+
+      node [fontname = Helvetica, shape = rectangle, fontsize=10] 
+      # notes indicate how many boxes you will have in your diagram. Since I have two sets of exclusions, I will have three nodes.
+      tab1 [label = '@@1'] # starting
+      tab2 [label = '@@2'] # exclusion 1
+      tab3 [label = '@@3'] # exclusion 2
+      tab4 [label = '@@4'] # Analytical sample
+      
+      tab1 -> tab2 -> tab3 -> tab4
+}
+      [1]: 'Number of participants who completed the demographics survey n=1737'
+      [2]: 'Number of participants who completed physical activity survey, n= 1661)'
+      [3]: 'Merged participants who completed both Physical activity survey and demographic survey n=1661'
+      [4]: 'Exclude 370 participants with any missing data- analytical sample n=1291'
+      ")
+```
+
+
 #TABLE1
 
 ```{r}
@@ -390,5 +420,27 @@ blr_test_hosmer_lemeshow(Ajusted_model1)
 
 # The Hosmer lemeshow goodness of fit test indicates a good model fitness (p-value<0.05)
 ```
+#Testing effect modification of sex on the relationship between social support on MVPA
+
+```{r}
+Effect_mod_model<-glm(MVPA_outofSchool_cat ~ Total_parental_support+Friend_support1_R+Friend_support2_R+PA_resources_cat+Env_stores_R+Env_Crimes_R+Env_barriertraffic_R+Age+Sex+Race+Total_parental_support*Sex+Friend_support2_R*Sex+Friend_support2_R*Sex, data=Merged_PA_exact, family="binomial")
+
+summary(Effect_mod_model)
+odds.n.ends(Effect_mod_model)
+
+Ajusted_model3<-glm(MVPA_outofSchool_cat ~ Total_parental_support+Friend_support1_R+Friend_support2_R+PA_resources_cat+Env_stores_R+Env_Crimes_R+Env_barriertraffic_R+Age+Sex+Race, data=Merged_PA_exact, family="binomial")
+summary(Ajusted_model3)
+odds.n.ends(Ajusted_model3)
+```
+
+```{r}
+lrtest(Effect_mod_model, Ajusted_model3)
+lrtest(Ajusted_model3,Effect_mod_model)
+
+# No effect modification by sex (P>0.05)
+```
+
+
+
 
 
