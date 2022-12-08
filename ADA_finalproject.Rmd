@@ -1,0 +1,394 @@
+---
+title: "ADA Final Project"
+author: "Vicent Ssentumbwe"
+date: '2022-11-22'
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r}
+library(haven)
+library(tidyverse)
+library(foreign)
+library(dplyr) # for manipulating the data frame
+library(janitor) 
+library(knitr)
+library(ggplot2) #for graphs 
+library(forcats)
+library(stringr)
+library(DescTools)
+library(dataMaid)
+library(tibble)
+pacman::p_load(haven, tidyverse, naniar, VIM, mice, lattice, table1)
+```
+
+```{r}
+Demographics <- read_sav('C:/Users/s.vicent/Documents/FALL_2022/Advanced data Analysis/Final_project/Teen-Demographic-SPSS.sav')
+PhysicActivity <- read_sav('C:/Users/s.vicent/Documents/FALL_2022/Advanced data Analysis/Final_project/teenpa_public_updated.sav')
+
+## Data can be accessed from https://cancercontrol.cancer.gov/brp/hbrb/flashe-study/flashe-files
+```
+
+```{r}
+# merge two datasets by participant's ID
+Merged_PA <- merge(Demographics,PhysicActivity,by="PID")
+```
+
+
+#Convert -9 (not assertained) to NA
+```{r}
+Merged_PA <- Merged_PA %>%
+    mutate(across(
+        TFOLFAMRUL:XTPREDWEEKSED,
+        ~na_if(., -9)
+    ))
+```
+
+
+## Pre-processing of data
+```{r}
+# Renaming the variables of interest
+Merged_PA <- Merged_PA %>%
+  rename (Age = TAGE,
+          Sex = TSEX, 
+          Race = TETHRAC_RC, 
+          BMI = XTBMI, 
+          Friend_support1 = TPSUPPRTPA, 
+          Friend_support2 = TPNORMPA, 
+          Parental_support1 = TPPPAENOUGH, 
+          Parental_support2 = TPPPATKPLCS, 
+          Parental_support3 = TPPPADECIDE, 
+          Parental_support4 = TPPPAMKEXRC, 
+          Parental_support5 = TPPPABEACTV, 
+          Parental_support6 = TPPPAMKRULE, 
+          Screen_Time1= TPPEDBADDAY, # To be reverse coded
+          Screen_Time2= TPPEDDECIDE, # To be reverse coded
+          Screen_Time3= TPPEDTKPLCS, # To be reverse coded
+          Screen_Time4= TPPEDPARDEC, # To be reverse coded
+          Screen_Time5= TPPEDPARREG, 
+          Screen_Time6= TPPEDTRYLIM, 
+          Screen_Time7= TPPEDMKRULE, # To be reverse coded
+          Fac_indoor= TPANINDOOR, 
+          Fac_School= TPANSCHREC, 
+          Fac_Trails= TPANTRAILS,
+          Fac_Playingfields= TPANPLAYFLD,
+          Fac_Publicpark= TPANPUBPRK, 
+          Env_stores= TPANSTORE, 
+          Env_Crimes= TPCRIME, 
+          Env_barriertraffic= TPTRAFFIC, 
+          MVPA_atSchool= XTPREDMINMVPAS, 
+          MVPA_outofSchool= XTPREDMINMVPAOFS, 
+          MVPA_Weekend= XTPREDMINMVPAW
+          )
+```
+
+```{r}
+# Selecting  variables of interest
+Merged_PA_Var <- select(Merged_PA, c('Age', 'Sex', 'Race', 'BMI', 'Friend_support1','Friend_support2', 'Parental_support1', 'Parental_support2', 'Parental_support3', 'Parental_support4', 'Parental_support5', 'Parental_support6', 'Screen_Time1', 'Screen_Time2', 'Screen_Time3', 'Screen_Time4', 'Screen_Time5', 'Screen_Time6', 'Screen_Time7', 'Fac_indoor', 'Fac_School', 'Fac_Trails', 'Fac_Playingfields', 'Fac_Publicpark', 'Env_stores', 'Env_Crimes', 'Env_barriertraffic', 'MVPA_atSchool', 'MVPA_outofSchool', 'MVPA_Weekend'))
+
+head(Merged_PA_Var)
+```
+# Do a complete case analysis,Drop NAs-drop cases for any participant with missing value on any variables
+```{r}
+Merged_PA_exact <- Merged_PA_Var %>%
+  drop_na()
+```
+
+```{r}
+# Adding up parental support items
+# Assessing the reliability of items in the scale using chronbac alpha
+
+#install.packages("ltm")
+library(ltm)
+# 
+Scale1 <- Merged_PA_exact[, c('Parental_support1','Parental_support2','Parental_support3','Parental_support4','Parental_support5','Parental_support6')]
+#   
+cronbach.alpha(Scale1) # Chronbach alpha is 0.831
+
+# Adding up all items to get a composite score
+Merged_PA_exact$Total_parental_support= Merged_PA_exact$Parental_support1+ Merged_PA_exact$Parental_support2+ Merged_PA_exact$Parental_support3+ Merged_PA_exact$Parental_support4+ Merged_PA_exact$Parental_support5+ Merged_PA_exact$Parental_support6
+range (Merged_PA_exact$Total_parental_support) # Theoretical range is 6-30 and the exact range is also 6-30
+summary(Merged_PA_exact$Total_parental_support)
+```
+# Getting the total available PA resources in the neighbour environmet
+```{r}
+Merged_PA_exact$PA_resources <- Merged_PA_exact$Fac_indoor +Merged_PA_exact$Fac_School +Merged_PA_exact$Fac_Trails +Merged_PA_exact$Fac_Playingfields +Merged_PA_exact$Fac_Publicpark
+range (Merged_PA_exact$PA_resources) # Theoretical range is 0-5 and the exact range is also 0-5
+summary(Merged_PA_exact$PA_resources)
+```
+
+
+```{r}
+# Change class of categorical variable names to factor
+Merged_PA_exact$Sex <- as.factor(Merged_PA_exact$Sex)
+Merged_PA_exact$Race <- as.factor(Merged_PA_exact$Race)
+Merged_PA_exact$Age <- as.factor(Merged_PA_exact$Age)
+Merged_PA_exact$Env_stores <- as.factor(Merged_PA_exact$Env_stores)
+Merged_PA_exact$Env_Crimes <- as.factor(Merged_PA_exact$Env_Crimes)
+Merged_PA_exact$Env_barriertraffic <- as.factor(Merged_PA_exact$Env_barriertraffic)
+Merged_PA_exact$Friend_support1 <- as.factor(Merged_PA_exact$Friend_support1)
+Merged_PA_exact$Friend_support2 <- as.factor(Merged_PA_exact$Friend_support2)
+```
+
+```{r}
+Merged_PA_exact<- Merged_PA_exact %>%
+  mutate(Sex=recode_factor(Sex,
+                           "1"= "Male",
+                           "2" ="Female"))%>%
+  mutate(Age = recode_factor(Age,
+                              '2' = "12",
+                              '3' = "13",
+                              '4' = "14",
+                              '5' = "15",
+                              '6' = "16",
+                              '7' = "17")) %>%
+  mutate(Race=recode_factor(Race,
+                              "1" ="Hispanic",
+                              "2" = "Non-Hispanic Black or African American Only",
+                              "3" ="Non-Hispanic White only",
+                              "4" = "Non-Hispanic Other"))%>%
+  
+  mutate(Friend_support1 = recode_factor(Friend_support1,
+                              '1' = "Strongly disagree",
+                              '2' = "Somewhat disagree",
+                              '3' = "Neither disagree nor agree",
+                              '4' = "Somewhat agree",
+                              '5' = "Strongly agree"))%>%
+  
+  mutate(Friend_support2 = recode_factor(Friend_support2,
+                              '1' = "Strongly disagree",
+                              '2' = "Somewhat disagree",
+                              '3' = "Neither disagree nor agree",
+                              '4' = "Somewhat agree",
+                              '5' = "Strongly agree"))%>%
+  
+mutate(Env_stores = recode_factor(Env_stores,
+                              '1' = "Strongly disagree",
+                              '2' = "Somewhat disagree",
+                              '3' = "Somewhat agree",
+                              '4' = "Strongly agree"))%>%
+  
+mutate(Env_Crimes = recode_factor(Env_Crimes,
+                              '1' = "Strongly disagree",
+                              '2' = "Somewhat disagree",
+                              '3' = "Somewhat agree",
+                              '4' = "Strongly agree"))%>%
+  
+mutate(Env_barriertraffic = recode_factor(Env_barriertraffic,
+                              '1' = "Strongly disagree",
+                              '2' = "Somewhat disagree",
+                              '3' = "Somewhat agree",
+                              '4' = "Strongly agree"))
+```
+
+# Categorizing further the peer support variables
+
+```{r}
+Merged_PA_exact$Friend_support1 <- as.numeric(Merged_PA_exact$Friend_support1)
+Merged_PA_exact$Friend_support1_R[Merged_PA_exact$Friend_support1>=1 & Merged_PA_exact$Friend_support1<=2]<-0
+Merged_PA_exact$Friend_support1_R[Merged_PA_exact$Friend_support1==3]<-1
+Merged_PA_exact$Friend_support1_R[Merged_PA_exact$Friend_support1>=4 & Merged_PA_exact$Friend_support1<=5]<-2
+
+Merged_PA_exact$Friend_support2 <- as.numeric(Merged_PA_exact$Friend_support2)
+Merged_PA_exact$Friend_support2_R[Merged_PA_exact$Friend_support2>=1 & Merged_PA_exact$Friend_support2<=2]<-0
+Merged_PA_exact$Friend_support2_R[Merged_PA_exact$Friend_support2==3]<-1
+Merged_PA_exact$Friend_support2_R[Merged_PA_exact$Friend_support2>=4 & Merged_PA_exact$Friend_support2<=5]<-2
+
+Merged_PA_exact<- Merged_PA_exact %>%
+mutate(Friend_support1_R = recode_factor(Friend_support1_R,
+                              '0' = "Disagree",
+                              '1' = "Neutral",
+                              '2' = "Agree"))%>%
+  
+  mutate(Friend_support2_R = recode_factor(Friend_support2_R,
+                              '0' = "Disagree",
+                              '1' = "Neutral",
+                              '2' = "Agree"))
+
+```
+
+
+# Categorizing further the items about the neighbourhood environment
+
+```{r}
+Merged_PA_exact<- Merged_PA_exact %>%
+mutate(Env_stores_R = case_when(Env_stores %in% c("Strongly disagree","Somewhat disagree") ~ 0,
+                             Env_stores %in% c("Somewhat agree","Strongly agree")~1)) %>%
+mutate(Env_stores_R = factor(Env_stores_R, levels = c(0, 1), labels = c("Disagree", "Agree")))%>%
+
+
+mutate(Env_Crimes_R = case_when(Env_Crimes %in% c("Strongly disagree","Somewhat disagree") ~ 0,
+                             Env_Crimes %in% c("Somewhat agree","Strongly agree")~1)) %>%
+mutate(Env_Crimes_R = factor(Env_Crimes_R, levels = c(0, 1), labels = c("Disagree", "Agree")))%>%
+  
+
+mutate(Env_barriertraffic_R = case_when(Env_barriertraffic %in% c("Strongly disagree","Somewhat disagree") ~ 0,
+                             Env_barriertraffic %in% c("Somewhat agree","Strongly agree")~1)) %>%
+mutate(Env_barriertraffic_R = factor(Env_barriertraffic_R, levels = c(0, 1), labels = c("Disagree", "Agree")))
+```
+
+# Categorizing further the PA resources in the neighboorhood
+```{r}
+Merged_PA_exact <- Merged_PA_exact %>%
+  mutate(PA_resources_cat = case_when(PA_resources == 0  ~ 0,
+                                       PA_resources >= 1 ~ 1),
+         PA_resources_cat = factor(PA_resources_cat, 0:1, c("No PA resources", "Presence of PA resources"))) #make it as a factor variable
+```
+
+
+# Categorizing MVPA into two suffient and insufficient MVPA based on the CDC guidelines for adolescent MVPA (https://www.cdc.gov/healthyschools/physicalactivity/guidelines.htm#:~:text=Children%20and%20adolescents%20ages%206%20through%2017%20years%20should%20do,to%2Dvigorous%20physical%20activity%20daily.)
+```{r}
+Merged_PA_exact <- Merged_PA_exact %>%
+  mutate(MVPA_atSchool_cat = case_when(MVPA_atSchool < 60  ~ 0,
+                                       MVPA_atSchool >= 60 ~ 1),
+         MVPA_atSchool_cat = factor(MVPA_atSchool_cat, 0:1, c("Insufficient MVPA", "Sufficient MVPA"))) #make it as a factor variable
+
+Merged_PA_exact <- Merged_PA_exact %>%
+  mutate(MVPA_outofSchool_cat = case_when(MVPA_outofSchool < 60  ~ 0,
+                                       MVPA_outofSchool >= 60 ~ 1),
+         MVPA_outofSchool_cat = factor(MVPA_outofSchool_cat, 0:1, c("Insufficient MVPA", "Sufficient MVPA"))) #make it as a factor variable
+
+Merged_PA_exact <- Merged_PA_exact %>%
+  mutate(MVPA_Weekend_cat = case_when(MVPA_Weekend < 60  ~ 0,
+                                       MVPA_Weekend >= 60 ~ 1),
+         MVPA_Weekend_cat = factor(MVPA_Weekend_cat, 0:1, c("Insufficient MVPA", "Sufficient MVPA"))) #make it as a factor variable
+```
+
+#TABLE1
+
+```{r}
+Tab1 <- table1(~Age + Sex + Race   + Total_parental_support  + Friend_support1_R + Friend_support2_R+ PA_resources_cat+Env_stores_R+Env_Crimes_R+Env_barriertraffic_R |MVPA_outofSchool_cat, overall="Total", rowlabelhead="Variable", Merged_PA_exact)
+knitr::kable(Tab1)
+```
+
+# MODELING
+
+```{r}
+pacman::p_load(dplyr, ggplot2, car, odds.n.ends,readr, tidyverse, broom)
+```
+
+# First, visualize the distribution of data: Look at the distribution of Parental support and MVPA outside school
+```{r}
+  ggplot(Merged_PA_exact, aes(x = MVPA_outofSchool_cat, y = Total_parental_support, fill = MVPA_outofSchool_cat)) +
+      geom_boxplot() +
+      labs(x = "MVPA level", y = "Parental support") +
+      theme_bw()
+
+```
+# univariable (unadjusted) logistic model for parental support.
+```{r}
+baseline_model1<-glm(MVPA_outofSchool_cat ~ Total_parental_support, data=Merged_PA_exact, family="binomial")
+summary(baseline_model1)
+```
+# Get odds ratios
+```{r}
+odds.n.ends(baseline_model1)
+```
+# For every unit increase in parental support the odds of sufficient MVPA increase by 1.08 times. Model sensitivity is 50% and specificity is 68%
+
+# Test lineality assumptions 
+```{r}
+Merged_PA_exact <- Merged_PA_exact %>%
+  mutate(Total_parental_support_log = Total_parental_support * log(Total_parental_support)) # create term to test linearity
+
+model2 <- glm(MVPA_outofSchool_cat~ Total_parental_support + Total_parental_support_log, data=Merged_PA_exact, family="binomial")
+
+summary(model2)
+
+# Since the p-value for the log term (Total_parental_support_log) is >.05, we fail to reject the hypothesis that the linearity assumption is not met using the Box Tidwell test, therefore we can use parental support as a continous or linear variable 
+```
+# Adding neighboorhood environment variables
+```{r}
+# All predictors- unadjusted
+baseline_model3<-glm(MVPA_outofSchool_cat ~ Total_parental_support+Friend_support1_R+Friend_support2_R+PA_resources_cat+Env_stores_R+Env_Crimes_R+Env_barriertraffic_R, data=Merged_PA_exact, family="binomial")
+summary(baseline_model3)
+```
+```{r}
+odds.n.ends(baseline_model3)
+```
+
+
+# Adjusting for age, sex, and race
+```{r}
+Ajusted_model1<-glm(MVPA_outofSchool_cat ~ Total_parental_support+Friend_support1_R+Friend_support2_R+PA_resources_cat+Env_stores_R+Env_Crimes_R+Env_barriertraffic_R+Age+Sex+Race, data=Merged_PA_exact, family="binomial")
+summary(Ajusted_model1)
+```
+
+```{r}
+odds.n.ends(Ajusted_model1)
+```
+```{r}
+odds.n.ends(Ajusted_model1, predProbPlot=TRUE, rocPlot = TRUE)
+```
+
+
+## Look at assumptions of multicollinearity using the vif function
+```{r}
+vif(Ajusted_model1)
+
+# The VIF values are > 5, therefore there is no multicollinearity
+```
+## Lets look for influential observations using Cook's distance. First we will plot
+```{r}
+# Plot Cooks's Distance
+
+plot(Ajusted_model1, which = 4, id.n = 3, col="blue") # which gives Cook's distance calculations (see https://stat.ethz.ch/R-manual/R-patched/library/stats/html/plot.lm.html)
+```
+
+## Use Cook's D calculations for each obervation and some other stats
+```{r}
+Ajusted_model1.data <- augment(Ajusted_model1) %>%  
+  mutate(index = 1:n()) 
+
+head(Ajusted_model1.data)
+```
+
+## Identify and exclude observations with a Cook's Distance greater than a cutoff, use 3 x the mean Cook's D 
+```{r}
+cuttoff <- mean(Ajusted_model1.data$.cooksd)*3 # defines cutoff variable
+
+Merged_PA_exact_out <- Ajusted_model1.data %>% # excludes observations
+  filter(.cooksd<cuttoff)
+
+nrow(Merged_PA_exact_out)/nrow(Merged_PA_exact) # check percent kept
+# 88.6% of the observations are kept
+# many observations are being excluded, therefore it is not a good idea to remove outliers, all observations are retained.
+```
+
+# Try excluding influential observations using a defined cuttoff
+```{r}
+cuttoff <- 0.01 # defines cutoff variable
+
+Merged_PA_exact_out2 <- Ajusted_model1.data %>% # excludes observations
+  filter(.cooksd<cuttoff)
+
+nrow(Merged_PA_exact_out2)/nrow(Merged_PA_exact) # check percent kept
+```
+## Rerun model and compare coefficients
+```{r}
+Ajusted_model2<-glm(MVPA_outofSchool_cat ~ Total_parental_support+Friend_support1_R+Friend_support2_R+PA_resources_cat+Env_stores_R+Env_Crimes_R+Env_barriertraffic_R+Age+Sex+Race, data=Merged_PA_exact_out2, family="binomial")
+summary(Ajusted_model2)
+odds.n.ends(Ajusted_model2)
+
+```
+# compare coefficients
+```{r}
+compareCoefs(Ajusted_model1, Ajusted_model2)
+
+# After excluding the outliers, the model performance doesnot change a lot therefore all observations are retained.
+```
+# Assess model fitness of Adjusted_model1
+```{r}
+blr_model_fit_stats(Ajusted_model1)
+blr_test_hosmer_lemeshow(Ajusted_model1)
+
+# The Hosmer lemeshow goodness of fit test indicates a good model fitness (p-value<0.05)
+```
+
+
